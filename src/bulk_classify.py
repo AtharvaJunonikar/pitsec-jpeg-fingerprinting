@@ -58,12 +58,15 @@ def dataframe2arff(df, filepath):
         arff_file.write(df.to_csv(header=False, index=False))
 
 #path = "/home/dsiegel/Pictures/Logitech_Brio210500/"
-path = "/mnt/c/pitsec-jpeg-fingerprinting/data/compressed"
-temp_path = "/mnt/c/pitsec-jpeg-fingerprinting/temp.jpeg"
-temp_path1 = "/mnt/c/pitsec-jpeg-fingerprinting/temp1.jpeg"
+#path = "/mnt/c/pitsec-jpeg-fingerprinting/data/compressed"
+path = "data/compressed"
+#temp_path = "/mnt/c/pitsec-jpeg-fingerprinting/temp.jpeg"
+temp_path = "temp.jpeg"
+#temp_path1 = "/mnt/c/pitsec-jpeg-fingerprinting/temp1.jpeg"
+temp_path1 = "temp1.jpeg"
 results = []
 columns = ['diff_C0', 'diff_C1', 'diff_C2', 'diff_C3', 'norm_C0', 'norm_C1', 'norm_C2', 'norm_C3', 'file', 'LABEL']
-for file in tqdm.tqdm(os.listdir(path)[:5]):
+for file in tqdm.tqdm(os.listdir(path)[:5]): # this is to select how many dataset to use. 
     im = Image.open(os.path.join(path, file))
     for version in bsp:
         temp_list = []
@@ -101,6 +104,10 @@ for file in tqdm.tqdm(os.listdir(path)[:5]):
         results.append(temp_list)
 
 df = pd.DataFrame(results, columns=columns)
-df.to_csv("/mnt/c/pitsec-jpeg-fingerprinting/test_output/output_addLayer.csv")
+#df.to_csv("/mnt/c/pitsec-jpeg-fingerprinting/test_output/output_addLayer.csv")
 
-dataframe2arff(df, "/mnt/c/pitsec-jpeg-fingerprinting/test_output/data_addLayer.arff")
+df.to_csv("test_output/output_addLayer.csv", index=False)
+
+#dataframe2arff(df, "/mnt/c/pitsec-jpeg-fingerprinting/test_output/data_addLayer.arff")
+
+dataframe2arff(df, "test_output/data_addLayer.arff")
