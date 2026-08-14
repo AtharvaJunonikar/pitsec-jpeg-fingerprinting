@@ -66,7 +66,7 @@ temp_path = "temp.jpeg"
 temp_path1 = "temp1.jpeg"
 results = []
 columns = ['diff_C0', 'diff_C1', 'diff_C2', 'diff_C3', 'norm_C0', 'norm_C1', 'norm_C2', 'norm_C3', 'file', 'LABEL']
-for file in tqdm.tqdm(os.listdir(path)[:5]): # this is to select how many dataset to use. 
+for file in tqdm.tqdm(os.listdir(path)[:5]):
     im = Image.open(os.path.join(path, file))
     for version in bsp:
         temp_list = []
