@@ -42,6 +42,9 @@ import tempfile
 import jpeglib
 import cv2
 from PIL import Image
+import torch
+
+CUDA_AVAILABLE = torch.cuda.is_available()
 
 # Import feature extraction modules
 # These should be in src/feature_extraction/
@@ -136,6 +139,98 @@ def get_cluster_label(version):
         cluster: 'C0', 'C1', 'C2', or 'C3'
     """
     return VERSION_TO_CLUSTER.get(version, 'UNKNOWN')
+
+def _gpu_dct_channel(channel, block_size=8):
+    """Compute 8x8 DCT blocks on CUDA."""
+    if not CUDA_AVAILABLE:
+        return None
+
+    h, w = channel.shape
+    h = (h // block_size) * block_size
+    w = (w // block_size) * block_size
+    if h == 0 or w == 0:
+        return None
+
+    x = torch.as_tensor(channel[:h, :w], dtype=torch.float32, device="cuda")
+    blocks = x.unfold(0, block_size, block_size).unfold(1, block_size, block_size)
+    blocks = blocks.contiguous()
+
+    n = block_size
+    k = torch.arange(n, device="cuda", dtype=torch.float32).reshape(-1, 1)
+    i = torch.arange(n, device="cuda", dtype=torch.float32).reshape(1, -1)
+    basis = (2.0 / n) ** 0.5 * torch.cos(
+        torch.pi * (2 * i + 1) * k / (2 * n)
+    )
+    basis[0, :] = (1.0 / n) ** 0.5
+
+    dct = basis @ blocks @ basis.T
+    dc = dct[..., 0, 0]
+    ac = torch.cat(
+        (
+            dct[..., 0, 1:].reshape(-1, n - 1),
+            dct[..., 1:, :].reshape(-1, (n - 1) * n)
+        ),
+        dim=1
+    )
+    return dc, ac
+
+
+def _extract_dct_features_cuda(jpeg_path):
+    """GPU-accelerated equivalent of the existing DCT feature extraction."""
+    img_bgr = cv2.imread(str(jpeg_path))
+    if img_bgr is None:
+        raise ValueError(f"Could not read image: {jpeg_path}")
+
+    img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+    img_ycbcr = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2YCrCb)
+
+    h, w = img_ycbcr.shape[:2]
+    pad_h = (8 - h % 8) % 8
+    pad_w = (8 - w % 8) % 8
+    if pad_h or pad_w:
+        img_ycbcr = np.pad(
+            img_ycbcr, ((0, pad_h), (0, pad_w), (0, 0)), mode="reflect"
+        )
+
+    features = {}
+
+    with torch.inference_mode():
+        for name, channel in {
+            "y": img_ycbcr[:, :, 0],
+            "cr": img_ycbcr[:, :, 1],
+            "cb": img_ycbcr[:, :, 2],
+        }.items():
+            dc, ac = _gpu_dct_channel(channel)
+
+            total_energy = torch.sum(ac * ac)
+            if total_energy.item() == 0:
+                energy_conc = torch.tensor(0.0, device="cuda")
+            else:
+                flat = torch.abs(ac).reshape(-1)
+                top_n = min(10, flat.numel())
+                top = torch.topk(flat, k=top_n).values
+                energy_conc = torch.sum(top * top) / total_energy
+
+            features[f"ac_energy_{name}"] = float(torch.sum(ac * ac).cpu())
+            features[f"dc_variance_{name}"] = float(torch.var(dc).cpu())
+            features[f"ac_variance_{name}"] = float(torch.var(ac).cpu())
+            features[f"zero_ratio_{name}"] = float(
+                torch.mean((torch.abs(ac) < 0.5).float()).cpu()
+            )
+            features[f"energy_conc_{name}"] = float(energy_conc.cpu())
+
+    features["ac_energy_avg"] = sum(
+        features[f"ac_energy_{c}"] for c in ("y", "cr", "cb")
+    ) / 3
+    features["dc_variance_avg"] = sum(
+        features[f"dc_variance_{c}"] for c in ("y", "cr", "cb")
+    ) / 3
+    features["zero_ratio_avg"] = sum(
+        features[f"zero_ratio_{c}"] for c in ("y", "cr", "cb")
+    ) / 3
+
+    return features
+
 
 def extract_ssim_features(jpeg_path):
     """
@@ -233,7 +328,7 @@ def extract_all_features(jpeg_path):
 
         # 2. DCT: extract_dct_features() accepts a JPEG path and returns
         # 18 values; retain the 15 per-channel features used by this dataset.
-        dct = extract_dct_features(jpeg_path)
+        dct = _extract_dct_features_cuda(jpeg_path) if CUDA_AVAILABLE else extract_dct_features(jpeg_path)
         if not dct:
             return None
         features.update({key: dct[key] for key in FEATURE_COLUMNS['dct']})
@@ -272,6 +367,7 @@ def main():
     print("\n" + "="*70)
     print("  PITSEC: Unified Feature Extraction Pipeline")
     print("  Combining SSIM + DCT + YCbCr + Chroma Features")
+    print(f"  DCT acceleration: {'CUDA (RTX 4060)' if CUDA_AVAILABLE else 'CPU'}")
     print("="*70 + "\n")
     
     # Clear log
