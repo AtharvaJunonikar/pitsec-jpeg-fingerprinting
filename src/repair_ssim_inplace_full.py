@@ -13,9 +13,9 @@ from tqdm import tqdm
 # ============================================================
 # CONFIGURATION
 # ============================================================
-CSV_INPUT = Path("/mnt/c/pitsec-jpeg-fingerprinting/output/all_features_combined.csv")
-CSV_OUTPUT = Path("/mnt/c/pitsec-jpeg-fingerprinting/output/all_features_combined_ssim_fixed.csv")
-IMAGE_DIR = Path("/mnt/c/pitsec-jpeg-fingerprinting/data/compressed")
+CSV_INPUT = Path("output/all_features_combined.csv")
+CSV_OUTPUT = Path("output/all_features_combined_ssim_fixed.csv")
+IMAGE_DIR = Path("data/compressed")
 
 # Optional old SSIM-only cache. If it exists, its values are
 # copied into the full output before processing continues.
