@@ -22,9 +22,9 @@ from sklearn.metrics import accuracy_score, classification_report, confusion_mat
 from sklearn.model_selection import GroupShuffleSplit
 
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-CSV_PATH = PROJECT_ROOT / "output" / "all_features_combined.csv"
-OUTPUT_DIR = PROJECT_ROOT / "output" / "random_forest_results"
+#PROJECT_ROOT = Path(__file__).resolve().parent.parent
+CSV_PATH = Path("/mnt/c/pitsec-jpeg-fingerprinting/output/all_features_combined.csv")
+OUTPUT_DIR = Path("/mnt/c/pitsec-jpeg-fingerprinting/output/random_forest_results")
 RANDOM_STATE = 42
 
 SSIM_FEATURES = [

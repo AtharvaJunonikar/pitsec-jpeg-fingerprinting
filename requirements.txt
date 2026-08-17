@@ -8,3 +8,5 @@ matplotlib>=3.4.0
 jpeglib>=0.7.0
 scipy>=1.7.0
 tqdm
+imbalanced-learn>=0.10.1
+xgboost>=1.7.0

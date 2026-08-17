@@ -56,6 +56,12 @@ RANDOM_STATE = 42
 TEST_SIZE = 0.2
 CV_FOLDS = 5
 
+# Balancing strategy: 'none' | 'oversample' | 'undersample'
+# - 'oversample' will upsample minority classes to the max class count (with replacement)
+# - 'undersample' will downsample majority classes to the min class count (without replacement)
+# Choose 'none' to rely on classifier's class_weight instead
+BALANCE_METHOD = 'oversample'
+
 # Decision Tree Hyperparameters
 DT_MAX_DEPTH = 8
 DT_MIN_SAMPLES_LEAF = 5
@@ -120,16 +126,78 @@ def analyze_data(df):
     
     return class_dist
 
+
+def balance_training_set(X_train, y_train, feature_names, method='oversample'):
+    """Balance the training set by oversampling or undersampling.
+
+    Returns balanced (X, y) as numpy arrays.
+    """
+    print(f"STEP 2c: Balancing training set ({method})...")
+
+    df_train = pd.DataFrame(X_train, columns=feature_names)
+    df_train[TARGET_COL] = y_train
+
+    counts = df_train[TARGET_COL].value_counts()
+    print("  Before balancing:")
+    for cls, cnt in counts.items():
+        print(f"    {cls}: {cnt}")
+
+    if method == 'oversample':
+        max_count = counts.max()
+        parts = []
+        for cls, cnt in counts.items():
+            df_cls = df_train[df_train[TARGET_COL] == cls]
+            if cnt < max_count:
+                df_resampled = df_cls.sample(max_count, replace=True, random_state=RANDOM_STATE)
+            else:
+                df_resampled = df_cls
+            parts.append(df_resampled)
+        df_bal = pd.concat(parts, ignore_index=True)
+
+    elif method == 'undersample':
+        min_count = counts.min()
+        parts = []
+        for cls, cnt in counts.items():
+            df_cls = df_train[df_train[TARGET_COL] == cls]
+            if cnt > min_count:
+                df_resampled = df_cls.sample(min_count, replace=False, random_state=RANDOM_STATE)
+            else:
+                df_resampled = df_cls
+            parts.append(df_resampled)
+        df_bal = pd.concat(parts, ignore_index=True)
+
+    else:
+        print("  Unknown balance method, returning original training set")
+        return X_train, y_train
+
+    # Shuffle
+    df_bal = df_bal.sample(frac=1.0, random_state=RANDOM_STATE).reset_index(drop=True)
+
+    counts_after = df_bal[TARGET_COL].value_counts()
+    print("  After balancing:")
+    for cls, cnt in counts_after.items():
+        print(f"    {cls}: {cnt}")
+
+    X_bal = df_bal[feature_names].values
+    y_bal = df_bal[TARGET_COL].values
+
+    log_message(f"Balanced training set using {method}: {counts_after.to_dict()}")
+
+    return X_bal, y_bal
+
 def train_decision_tree(X_train, y_train):
     """Train decision tree."""
     print("STEP 3: Training Decision Tree...")
     
+    # If we've balanced the training set already, do not use class_weight; otherwise keep 'balanced'
+    class_weight = None if BALANCE_METHOD in ('oversample', 'undersample') else 'balanced'
+
     clf = DecisionTreeClassifier(
         max_depth=DT_MAX_DEPTH,
         min_samples_leaf=DT_MIN_SAMPLES_LEAF,
         min_samples_split=DT_MIN_SAMPLES_SPLIT,
         random_state=RANDOM_STATE,
-        class_weight='balanced'
+        class_weight=class_weight
     )
     
     clf.fit(X_train, y_train)
@@ -362,6 +430,11 @@ def main():
     )
     print(f"  Training: {len(X_train)} samples")
     print(f"  Test: {len(X_test)} samples\n")
+    
+    # Optionally balance the training set
+    if BALANCE_METHOD in ('oversample', 'undersample'):
+        X_train, y_train = balance_training_set(X_train, y_train, feature_names, method=BALANCE_METHOD)
+        print(f"  After balancing training: {len(X_train)} samples\n")
     
     # Train
     clf = train_decision_tree(X_train, y_train)
